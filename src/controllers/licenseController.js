@@ -1,4 +1,5 @@
 import { LicenseModel } from "../models/licenseModel.js";
+import cloudinary from '../utils/cloudinary.js';
 
 export const getAllLicenses = async (req, res) => {
   try {
@@ -25,8 +26,49 @@ export const createLicense = async (req, res) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) return res.status(401).json({ message: "Unauthorized." });
-    const newId = await LicenseModel.create({ ...req.body, seller_id: sellerId });
-    res.status(201).json({ message: "License berhasil ditambahkan", id: newId });
+
+    // Upload semua gambar yang dikirim
+    const imageFields = ["image_url_1", "image_url_2", "image_url_3", "image_url_4"];
+    const imageUrls = {};
+    if (req.files) {
+      const streamifier = await import('streamifier');
+      for (const field of imageFields) {
+        if (req.files[field] && req.files[field][0]) {
+          const buffer = req.files[field][0].buffer;
+          const streamUpload = (buffer) => {
+            return new Promise((resolve, reject) => {
+              const stream = cloudinary.uploader.upload_stream(
+                { folder: "licenses" },
+                (error, result) => {
+                  if (result) resolve(result);
+                  else reject(error);
+                }
+              );
+              streamifier.default.createReadStream(buffer).pipe(stream);
+            });
+          };
+          const uploadResult = await streamUpload(buffer);
+          imageUrls[field] = uploadResult.secure_url;
+        } else {
+          imageUrls[field] = ""; // kosong jika tidak ada file
+        }
+      }
+    } else {
+      for (const field of imageFields) {
+        imageUrls[field] = "";
+      }
+    }
+    // Validasi image_url_1 wajib ada
+    if (!imageUrls.image_url_1) {
+      return res.status(400).json({ message: "Gambar utama (image_url_1) wajib diupload." });
+    }
+
+    const newId = await LicenseModel.create({
+      ...req.body,
+      seller_id: sellerId,
+      ...imageUrls
+    });
+    res.status(201).json({ message: "License berhasil ditambahkan", id: newId, ...imageUrls });
   } catch (error) {
     console.error("❌ Gagal tambah license:", error);
     res.status(500).json({ message: "Gagal menambahkan license." });
@@ -35,9 +77,44 @@ export const createLicense = async (req, res) => {
 
 export const updateLicense = async (req, res) => {
   try {
-    const updated = await LicenseModel.update(req.params.id, req.body);
+    // ...mirip createLicense, upload file baru jika ada...
+    const imageFields = ["image_url_1", "image_url_2", "image_url_3", "image_url_4"];
+    const imageUrls = {};
+    if (req.files) {
+      const streamifier = await import('streamifier');
+      for (const field of imageFields) {
+        if (req.files[field] && req.files[field][0]) {
+          const buffer = req.files[field][0].buffer;
+          const streamUpload = (buffer) => {
+            return new Promise((resolve, reject) => {
+              const stream = cloudinary.uploader.upload_stream(
+                { folder: "licenses" },
+                (error, result) => {
+                  if (result) resolve(result);
+                  else reject(error);
+                }
+              );
+              streamifier.default.createReadStream(buffer).pipe(stream);
+            });
+          };
+          const uploadResult = await streamUpload(buffer);
+          imageUrls[field] = uploadResult.secure_url;
+        } else {
+          imageUrls[field] = ""; // kosong jika tidak ada file
+        }
+      }
+    } else {
+      // Jika tidak ada file sama sekali, isi semua field gambar dengan string kosong
+      for (const field of imageFields) {
+        imageUrls[field] = "";
+      }
+    }
+    const updated = await LicenseModel.update(req.params.id, {
+      ...req.body,
+      ...imageUrls
+    });
     if (!updated) return res.status(404).json({ message: "License tidak ditemukan." });
-    res.json({ message: "License berhasil diperbarui." });
+    res.json({ message: "License berhasil diperbarui.", ...imageUrls });
   } catch (error) {
     console.error("❌ Gagal update license:", error);
     res.status(500).json({ message: "Gagal memperbarui license." });

@@ -32,18 +32,27 @@ export const LicenseModel = {
   async create(data) {
     const sql = `
       INSERT INTO licenses
-      (seller_id, name, slug, description, spesification, image_url, price, license_type, stock, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (seller_id, sellerid, title, price, slug, description, feature, info, penjual, whatsapp, image_url_1, image_url_2, image_url_3, image_url_4, license_type, pembayaran, stock, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
+    const pembayaranStr = typeof data.pembayaran === "object" ? JSON.stringify(data.pembayaran) : data.pembayaran || '{}';
     const [result] = await pool.query(sql, [
       data.seller_id,
-      data.name,
+      data.sellerid,
+      data.title,
+      data.price || 0,
       data.slug || null,
       data.description || null,
-      data.spesification || null,
-      data.image_url || null,
-      data.price || 0,
+      data.feature || null,
+      data.info || null,
+      data.penjual || null,
+      data.whatsapp || null,
+      data.image_url_1,
+      data.image_url_2 || '',
+      data.image_url_3 || '',
+      data.image_url_4 || '',
       data.license_type || 'license',
+      pembayaranStr,
       data.stock || 0,
       data.status || 'active',
     ]);
@@ -52,26 +61,43 @@ export const LicenseModel = {
   async update(id, data) {
     const sql = `
       UPDATE licenses SET
-        name = ?,
+        sellerid = ?,
+        title = ?,
+        feature = ?,
+        info = ?,
+        penjual = ?,
+        whatsapp = ?,
         slug = ?,
         description = ?,
-        spesification = ?,
-        image_url = ?,
+        image_url_1 = ?,
+        image_url_2 = ?,
+        image_url_3 = ?,
+        image_url_4 = ?,
         price = ?,
         license_type = ?,
+        pembayaran = ?,
         stock = ?,
         status = ?,
         updated_at = NOW()
       WHERE id = ?
     `;
+    const pembayaranStr = typeof data.pembayaran === "object" ? JSON.stringify(data.pembayaran) : data.pembayaran || '{}';
     const [result] = await pool.query(sql, [
-      data.name,
+      data.title,
+      data.sellerid,
       data.slug,
       data.description,
-      data.spesification,
-      data.image_url,
+      data.feature,
+      data.info,
+      data.penjual,
+      data.whatsapp,
+      data.image_url_1,
+      data.image_url_2,
+      data.image_url_3,
+      data.image_url_4,
       data.price,
       data.license_type,
+      pembayaranStr,
       data.stock,
       data.status,
       id,
