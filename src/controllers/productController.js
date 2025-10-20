@@ -4,6 +4,12 @@ export const patchProduct = async (req, res) => {
     const { id } = req.params;
     const data = { ...req.body };
     const files = req.files || {};
+    const imageFields = ["image_url_1", "image_url_2", "image_url_3", "image_url_4"];
+
+    // Ambil data produk lama
+    const oldProduct = await ProductModel.findById(id);
+    if (!oldProduct) return res.status(404).json({ message: "Produk tidak ditemukan." });
+
     // Jika spesification/pembayaran string (dari FormData), parse ke objek
     if (typeof data.spesification === "string") {
       try { data.spesification = JSON.parse(data.spesification); } catch {}
@@ -11,6 +17,7 @@ export const patchProduct = async (req, res) => {
     if (typeof data.pembayaran === "string") {
       try { data.pembayaran = JSON.parse(data.pembayaran); } catch {}
     }
+
     // Proses upload untuk setiap gambar jika ada file baru
     if (Object.keys(files).length > 0) {
       const streamifier = await import('streamifier');
@@ -26,14 +33,36 @@ export const patchProduct = async (req, res) => {
           streamifier.default.createReadStream(buffer).pipe(stream);
         });
       };
-      for (let i = 1; i <= 4; i++) {
-        const field = `image_url_${i}`;
+      for (const field of imageFields) {
         if (files[field] && files[field][0]) {
+          // Jika ada gambar lama, hapus dari Cloudinary
+          if (oldProduct[field]) {
+            const match = oldProduct[field].match(/\/upload\/(?:v\d+\/)?(.+?)\.[a-zA-Z0-9]+$/);
+            const publicId = match ? match[1] : null;
+            if (publicId) {
+              try { await cloudinary.uploader.destroy(publicId); } catch {}
+            }
+          }
           const uploadResult = await streamUpload(files[field][0].buffer);
           data[field] = uploadResult.secure_url;
         }
       }
     }
+
+    // Jika field gambar dikosongkan/null dari frontend, hapus gambar lama dari Cloudinary & kosongkan di DB
+    for (const field of imageFields) {
+      if ((field in data) && (!data[field] || data[field] === "null")) {
+        if (oldProduct[field]) {
+          const match = oldProduct[field].match(/\/upload\/(?:v\d+\/)?(.+?)\.[a-zA-Z0-9]+$/);
+          const publicId = match ? match[1] : null;
+          if (publicId) {
+            try { await cloudinary.uploader.destroy(publicId); } catch {}
+          }
+        }
+        data[field] = "";
+      }
+    }
+
     const updated = await ProductModel.patch(id, data);
     if (updated) {
       res.status(200).json({ message: "Produk berhasil diperbarui sebagian" });
