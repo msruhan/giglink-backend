@@ -1,3 +1,70 @@
+export const patchLicense = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = { ...req.body };
+    const files = req.files || {};
+    const imageFields = ["image_url_1", "image_url_2", "image_url_3", "image_url_4"];
+
+    // 1. Ambil data license lama
+    const oldLicense = await LicenseModel.findById(id);
+    if (!oldLicense) return res.status(404).json({ message: "License tidak ditemukan." });
+
+    // 2. Proses upload gambar baru jika ada file baru
+    if (Object.keys(files).length > 0) {
+      const streamifier = await import('streamifier');
+      const streamUpload = (buffer) => {
+        return new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            { folder: "licenses" },
+            (error, result) => {
+              if (result) resolve(result);
+              else reject(error);
+            }
+          );
+          streamifier.default.createReadStream(buffer).pipe(stream);
+        });
+      };
+      for (const field of imageFields) {
+        if (files[field] && files[field][0]) {
+          // Jika ada gambar lama, hapus dari Cloudinary
+          if (oldLicense[field]) {
+            const match = oldLicense[field].match(/\/upload\/(?:v\d+\/)?(.+?)\.[a-zA-Z0-9]+$/);
+            const publicId = match ? match[1] : null;
+            if (publicId) {
+              try { await cloudinary.uploader.destroy(publicId); } catch {}
+            }
+          }
+          const uploadResult = await streamUpload(files[field][0].buffer);
+          data[field] = uploadResult.secure_url;
+        }
+      }
+    }
+
+    // 3. Jika field gambar dikosongkan/null dari frontend, hapus gambar lama dari Cloudinary & kosongkan di DB
+    for (const field of imageFields) {
+      if ((field in data) && (!data[field] || data[field] === "null")) {
+        if (oldLicense[field]) {
+          const match = oldLicense[field].match(/\/upload\/(?:v\d+\/)?(.+?)\.[a-zA-Z0-9]+$/);
+          const publicId = match ? match[1] : null;
+          if (publicId) {
+            try { await cloudinary.uploader.destroy(publicId); } catch {}
+          }
+        }
+        data[field] = "";
+      }
+    }
+
+    const updated = await LicenseModel.patch(id, data);
+    if (updated) {
+      res.status(200).json({ message: "License berhasil diperbarui sebagian" });
+    } else {
+      res.status(404).json({ message: "License tidak ditemukan atau tidak ada perubahan" });
+    }
+  } catch (error) {
+    console.error("Gagal patch license:", error);
+    res.status(500).json({ message: "Terjadi kesalahan server" });
+  }
+};
 import { LicenseModel } from "../models/licenseModel.js";
 import cloudinary from '../utils/cloudinary.js';
 

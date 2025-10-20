@@ -1,3 +1,4 @@
+
 import mysql from "mysql2/promise";
 import dotenv from "dotenv";
 
@@ -106,6 +107,22 @@ export const LicenseModel = {
   },
   async delete(id) {
     const [result] = await pool.query("DELETE FROM licenses WHERE id = ?", [id]);
+    return result.affectedRows > 0;
+  },
+  
+    // Patch license (update sebagian field)
+  async patch(id, data) {
+    // Stringify pembayaran jika berupa objek
+    if (data.pembayaran && typeof data.pembayaran === "object") {
+      data.pembayaran = JSON.stringify(data.pembayaran);
+    }
+    const fields = Object.keys(data);
+    if (fields.length === 0) return false;
+    const setClause = fields.map(f => `${f} = ?`).join(", ");
+    const sql = `UPDATE licenses SET ${setClause}, updated_at = NOW() WHERE id = ?`;
+    const values = fields.map(f => data[f]);
+    values.push(id);
+    const [result] = await pool.query(sql, values);
     return result.affectedRows > 0;
   },
 };
